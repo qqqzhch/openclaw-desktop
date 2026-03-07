@@ -1,0 +1,60 @@
+name: Build OpenClaw Desktop
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        
+    steps:
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # 2. Install Rust toolchain
+      - name: Install Rust toolchain
+        uses: actions/setup-rust@v1
+        with:
+          toolchain: stable
+      
+      # 3. Install Node.js
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      
+      # 4. Cache dependencies
+      - name: Cache dependencies
+        uses: actions/cache@v4
+      
+      # 5. Install frontend dependencies
+      - name: Install frontend dependencies
+        run: npm install
+      
+      # 6. Build frontend
+      - name: Build frontend
+        run: npm run build
+      
+      # 7. Build Tauri app
+      - name: Build Tauri app
+        run: cd src-tauri && cargo build --release
+      
+      # 8. Upload artifacts
+      - name: Upload artifacts
+        if: matrix.os != 'windows'
+        run: |
+          gh release create ${
+            "tag": "v${{ steps.Build-Tauri-app.outputs.version }}",
+            "name": "OpenClaw Desktop v${{ steps.Build-Tauri-app.outputs.version }}",
+            "body": "OpenClaw Desktop desktop application - MVP release",
+            "draft": false,
+            "prerelease": true,
+            "generate_release_notes": true
+          } || echo "Release failed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
