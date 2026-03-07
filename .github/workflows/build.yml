@@ -2,59 +2,116 @@ name: Build OpenClaw Desktop
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-and-test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-latest'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
-      # 1. Checkout code
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-      
-      # 2. Install Rust toolchain
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
       - name: Install Rust toolchain
-        uses: actions/setup-rust@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-      
-      # 3. Install Node.js
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+  build-tauri-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      
-      # 4. Cache dependencies
-      - name: Cache dependencies
-        uses: actions/cache@v4
-      
-      # 5. Install frontend dependencies
-      - name: Install frontend dependencies
-        run: npm install
-      
-      # 6. Build frontend
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Build frontend
         run: npm run build
-      
-      # 7. Build Tauri app
+
       - name: Build Tauri app
-        run: cd src-tauri && cargo build --release
-      
-      # 8. Upload artifacts
-      - name: Upload artifacts
-        if: matrix.os != 'windows'
-        run: |
-          gh release create ${
-            "tag": "v${{ steps.Build-Tauri-app.outputs.version }}",
-            "name": "OpenClaw Desktop v${{ steps.Build-Tauri-app.outputs.version }}",
-            "body": "OpenClaw Desktop desktop application - MVP release",
-            "draft": false,
-            "prerelease": true,
-            "generate_release_notes": true
-          } || echo "Release failed"
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauri-script: build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tauri-bundle-artifacts
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/release/bundle.appimage
+          retention-days: 30
