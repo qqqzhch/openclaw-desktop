@@ -1,84 +1,48 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Box,
-  Typography,
-  Card,
+import React, { useState, useRef } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Card, 
   CardContent,
   TextField,
-  Select,
-  MenuItem,
+  InputAdornment,
+  IconButton,
   FormControl,
   InputLabel,
+  Select,
+  MenuItem,
   Chip,
-  Stack,
-  IconButton
+  Stack
 } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import ClearIcon from '@mui/icons-material/Clear';
-import SearchIcon from '@mui/icons-material/Search';
+import {
+  Search as SearchIcon,
+  Refresh as RefreshIcon,
+  Delete as ClearIcon
+} from '@mui/icons-material';
 
-import { useAppStore } from '../store';
-import Loading from './Loading';
+import { Log, LogLevel } from '../types';
 
-type LogLevel = 'ALL' | 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+interface LogViewerProps {
+  logs: Log[];
+  onRefresh?: () => void;
+  onClear?: () => void;
+}
 
-export default function LogViewer() {
-  const {
-    logs,
-    logsLoading,
-    logsError,
-    fetchLogs,
-    clearLogs
-  } = useAppStore();
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const [localLevel, setLocalLevel] = useState<LogLevel>('ALL');
+export default function LogViewer({ logs, onRefresh, onClear }: LogViewerProps) {
   const [localKeyword, setLocalKeyword] = useState('');
-
-  useEffect(() => {
-    fetchLogs(100); // 获取最近 100 条日志
-
-    const interval = setInterval(() => {
-      fetchLogs(100);
-    }, 3000); // 每 3 秒刷新一次
-
-    return () => clearInterval(interval);
-  }, [fetchLogs]);
-
-  // 自动滚动到底部
-  useEffect(() => {
-    if (scrollRef.current && logs.length > 0) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  const handleRefresh = () => {
-    fetchLogs(100);
-  };
-
-  const handleClear = () => {
-    clearLogs();
-  };
-
-  const handleLevelChange = (value: LogLevel) => {
-    setLocalLevel(value);
-    fetchLogs(100); // 重新获取日志
-  };
-
-  const handleKeywordChange = (keyword: string) => {
-    setLocalKeyword(keyword);
-    fetchLogs(100); // 重新获取日志
-  };
+  const [localLevel, setLocalLevel] = useState<LogLevel>('ALL');
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string>('');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const getLogLevelColor = (level: string): string => {
     switch (level) {
-      case 'ERROR':
-        return '#f44336';
-      case 'WARN':
-        return '#ff9800';
       case 'INFO':
         return '#4caf50';
+      case 'WARN':
+        return '#ff9800';
+      case 'ERROR':
+        return '#f44336';
       case 'DEBUG':
         return '#2196f3';
       default:
@@ -86,15 +50,39 @@ export default function LogViewer() {
     }
   };
 
-  // 过滤日志
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = logs.filter((log: Log) => {
     const matchesLevel = localLevel === 'ALL' || log.level === localLevel;
     const matchesKeyword = localKeyword === '' || log.message.toLowerCase().includes(localKeyword.toLowerCase());
     return matchesLevel && matchesKeyword;
   });
 
+  const handleKeywordChange = (keyword: string) => {
+    setLocalKeyword(keyword);
+  };
+
+  const handleLevelChange = (level: string) => {
+    setLocalLevel(level as LogLevel);
+  };
+
+  const handleRefresh = () => {
+    setLogsLoading(true);
+    onRefresh?.();
+    setTimeout(() => {
+      setLogsLoading(false);
+    }, 1000);
+  };
+
+  const handleClear = () => {
+    onClear?.();
+    setLocalKeyword('');
+  };
+
   if (logsLoading && logs.length === 0) {
-    return <Loading type="list" />;
+    return (
+      <Box>
+        <Typography>加载中...</Typography>
+      </Box>
+    );
   }
 
   return (
@@ -132,7 +120,7 @@ export default function LogViewer() {
                 <Select
                   value={localLevel}
                   label="日志级别"
-                  onChange={(e) => handleLevelChange(e.target.value as LogLevel)}
+                  onChange={(e) => handleLevelChange(e.target.value as string)}
                 >
                   <MenuItem value="ALL">全部</MenuItem>
                   <MenuItem value="INFO">INFO</MenuItem>
@@ -192,12 +180,12 @@ export default function LogViewer() {
                   {logs.length === 0 ? '暂无日志' : '没有匹配的日志'}
                 </Typography>
               ) : (
-                filteredLogs.map((log, index) => (
+                filteredLogs.map((log: Log, index: number) => (
                   <Box
                     key={`${log.timestamp}-${index}`}
                     sx={{
                       py: 0.5,
-                      borderBottom: '1px solid #1e1e1e',
+                      borderBottom: '1px solid' #1e1e1e',
                       color: getLogLevelColor(log.level),
                       display: 'flex',
                       gap: 2
