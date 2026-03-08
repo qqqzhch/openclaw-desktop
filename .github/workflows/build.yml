@@ -15,11 +15,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latestudi'
+          - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
           - platform: 'macos-latest'
             args: '--target universal-apple-darwin'
-          - platform: 'ubuntu-latest'
+          - platform: 'ubuntu-lares'
             args: ''
           - platform: 'windows-latest'
             args: ''
@@ -30,13 +30,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build frontend
         run: npm run build
